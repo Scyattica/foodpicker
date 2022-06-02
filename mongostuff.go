@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -52,15 +54,52 @@ func connect(uri string) (*mongo.Client, context.Context,
 // This is a user defined method that accepts
 // mongo.Client and context.Context
 // This method used to ping the mongoDB, return error if any.
-func ping(client *mongo.Client, ctx context.Context) error {
+func ping(client *mongo.Client, ctx context.Context) string {
 
 	// mongo.Client has Ping to ping mongoDB, deadline of
 	// the Ping method will be determined by cxt
 	// Ping method return error if any occurred, then
 	// the error can be handled.
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		return err
+		return "connection failed!"
 	}
-	fmt.Println("connected successfully")
-	return nil
+	return "connected successfully"
+}
+
+func getMongoConnectionString() string {
+	var mongoip, mongoport, mongouser, mongopass string
+	if os.Getenv("MONGO_IP") != "" {
+		mongoip = os.Getenv("MONGO_IP")
+	} else {
+		mongoip = "192.168.1.193"
+	}
+
+	if os.Getenv("MONGO_PORT") != "" {
+		mongoport = os.Getenv("MONGO_PORT")
+	} else {
+		mongoport = "27017"
+	}
+
+	if os.Getenv("MONGO_USER") != "" {
+		mongouser = os.Getenv("MONGO_USER")
+	} else {
+		mongouser = "root"
+	}
+
+	if os.Getenv("MONGO_PASS") != "" {
+		mongopass = os.Getenv("MONGO_PASS")
+	} else {
+		panic("no mongo creds specified!")
+	}
+	return fmt.Sprintf("mongodb://%s:%s@%s:%s", mongouser, mongopass, mongoip, mongoport)
+}
+
+func mongo_healthcheck(w http.ResponseWriter, r *http.Request) {
+	client, ctx, cancel, err := connect(getMongoConnectionString())
+	if err != nil {
+		fmt.Fprintf(w, "MongoDB connection error!")
+	}
+
+	defer close(client, ctx, cancel)
+	fmt.Fprint(w, ping(client, ctx))
 }
